@@ -1,16 +1,30 @@
 all: main
 
 CXX = clang++
-override CXXFLAGS += -g -Wall -Werror `pkg-config --cflags --libs opencv4`
+override CXXFLAGS += -g -Wall -Werror `pkg-config --cflags --libs opencv4 Qt6Core Qt6Gui Qt6Widgets`
 
 SRCS = $(shell find . -name '.ccls-cache' -type d -prune -o -type f -name '*.cpp' -print | sed -e 's/ /\\ /g')
 HEADERS = $(shell find . -name '.ccls-cache' -type d -prune -o -type f -name '*.h' -print)
 
-main: $(SRCS) $(HEADERS)
+# Add the MOC files here
+MOC = main.moc
+
+# Ensure moc has a valid executable path
+MOC_EXEC = $(shell which moc-qt6 2>/dev/null || which moc 2>/dev/null || echo "$(shell find /nix -name moc-qt6 -type f 2>/dev/null | head -n 1)")
+MOC_EXEC_FOUND := $(shell which $(MOC_EXEC))
+
+main: $(SRCS) $(HEADERS) $(MOC)
 	$(CXX) $(CXXFLAGS) $(SRCS) -o "$@"
 
-main-debug: $(SRCS) $(HEADERS)
-	NIX_HARDENING_ENABLE= $(CXX) $(CXXFLAGS) -O0  $(SRCS) -o "$@"
+$(MOC): main.cpp
+	@if [ -z "$(MOC_EXEC_FOUND)" ]; then \
+		echo "Error: moc not found. Please ensure Qt development tools are installed."; \
+		exit 127; \
+	fi
+	$(MOC_EXEC) main.cpp -o main.moc
+
+main-debug: $(SRCS) $(HEADERS) $(MOC)
+	NIX_HARDENING_ENABLE= $(CXX) $(CXXFLAGS) -O0 $(SRCS) -o "$@"
 
 clean:
-	rm -f main main-debug
+	rm -f main main-debug $(MOC)
