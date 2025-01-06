@@ -86,7 +86,7 @@ void findSimilarPhotos(const std::string &targetPhotoPath,
       continue;
 
     double similarity = compareImages(targetImg, compareImg);
-    if (similarity > 0.85) {
+    if (similarity > 0.50) {
       std::cout << "\033[1;32mSimilar photo " << ++count << ":\033[0m\n";
       std::cout << "📸 " << fs::path(photo).filename() << "\n";
       std::cout << "✨ Similarity: " << std::fixed << std::setprecision(2)
@@ -126,12 +126,12 @@ int main() {
     }
   }
 
+  int choice = 0;
   while (true) {
     clearScreen();
     printHeader();
     printMenu();
 
-    int choice;
     std::cin >> choice;
     std::cin.ignore();
 
