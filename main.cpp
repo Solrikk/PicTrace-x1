@@ -1,167 +1,165 @@
-#include <cstdlib>
+#include <QApplication>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QFileDialog>
+#include <QGridLayout>
+#include <QLabel>
+#include <QMainWindow>
+#include <QMimeData> // Add this line
+#include <QPushButton>
+#include <QScrollArea>
+#include <QWidget>
 #include <filesystem>
 #include <iomanip>
-#include <iostream>
 #include <opencv2/opencv.hpp>
 #include <vector>
 
 namespace fs = std::filesystem;
 
-void clearScreen() { std::cout << "\033[2J\033[1;1H"; }
-
-void printHeader() {
-  std::cout << "\033[1;36m";
-  std::cout << "╔════════════════════════════════════════╗\n";
-  std::cout << "║               PicTrace-x1              ║\n";
-  std::cout << "╚════════════════════════════════════════╝\n";
-  std::cout << "\033[0m";
-}
-
-void printMenu() {
-  std::cout << "\n\033[1;33m";
-  std::cout << "Menu Options:\n";
-  std::cout << "════════════\n";
-  std::cout << "\033[0m";
-  std::cout << "1. 🔍 Compare photos\n";
-  std::cout << "2. 📋 List all photos\n";
-  std::cout << "3. 🚪 Exit\n\n";
-  std::cout << "\033[1;32mChoose option (1-3):\033[0m ";
-}
-
-void extractZipArchive(const std::string &zipPath) {
-  if (!fs::exists(zipPath)) {
-    std::cerr << "\033[1;31mError: " << zipPath << " not found\033[0m"
-              << std::endl;
-    return;
+class DropArea : public QLabel {
+  Q_OBJECT
+public:
+  DropArea(QWidget *parent = nullptr) : QLabel(parent) {
+    setAlignment(Qt::AlignCenter);
+    setText("Перетащите фото сюда\nили нажмите для выбора");
+    setMinimumSize(300, 200);
+    setFrameStyle(QFrame::Box);
+    setAcceptDrops(true);
   }
 
-  if (system("mkdir -p ./extracted_photos") != 0) {
-    std::cerr << "\033[1;31mError creating directory\033[0m" << std::endl;
-    return;
+protected:
+  void dragEnterEvent(QDragEnterEvent *event) override {
+    if (event->mimeData()->hasUrls())
+      event->acceptProposedAction();
   }
 
-  std::string cmd = "unzip -o " + zipPath + " -d ./extracted_photos";
-  if (system(cmd.c_str()) != 0) {
-    std::cerr << "\033[1;31mError extracting zip file\033[0m" << std::endl;
-    return;
+  void dropEvent(QDropEvent *event) override {
+    QString file = event->mimeData()->urls().first().toLocalFile();
+    emit imageDropped(file);
   }
 
-  std::cout << "\033[1;32mPhotos extracted successfully\033[0m" << std::endl;
-}
-
-double compareImages(const cv::Mat &img1, const cv::Mat &img2) {
-  cv::Mat hist1, hist2;
-  int channels[] = {0, 1, 2};
-  int histSize[] = {8, 8, 8};
-  float range[] = {0, 256};
-  const float *ranges[] = {range, range, range};
-
-  cv::calcHist(&img1, 1, channels, cv::Mat(), hist1, 3, histSize, ranges);
-  cv::calcHist(&img2, 1, channels, cv::Mat(), hist2, 3, histSize, ranges);
-
-  cv::normalize(hist1, hist1);
-  cv::normalize(hist2, hist2);
-
-  return cv::compareHist(hist1, hist2, cv::HISTCMP_CORREL);
-}
-
-void findSimilarPhotos(const std::string &targetPhotoPath,
-                       const std::vector<std::string> &allPhotos) {
-  cv::Mat targetImg = cv::imread(targetPhotoPath);
-  if (targetImg.empty()) {
-    std::cout << "\033[1;31mError: Cannot open target image\033[0m\n";
-    return;
+  void mousePressEvent(QMouseEvent *event) override {
+    QString file = QFileDialog::getOpenFileName(
+        this, "Выберите фото", QString(), "Images (*.jpg *.jpeg *.png)");
+    if (!file.isEmpty())
+      emit imageDropped(file);
   }
 
-  std::cout << "\n\033[1;34mSearching for similar photos...\033[0m\n\n";
-  bool foundSimilar = false;
-  int count = 0;
+signals:
+  void imageDropped(const QString &path);
+};
 
-  for (const auto &photo : allPhotos) {
-    if (photo == targetPhotoPath)
-      continue;
+class MainWindow : public QMainWindow {
+  Q_OBJECT
+public:
+  MainWindow() {
+    QWidget *centralWidget = new QWidget;
+    QGridLayout *layout = new QGridLayout(centralWidget);
 
-    cv::Mat compareImg = cv::imread(photo);
-    if (compareImg.empty())
-      continue;
+    dropArea = new DropArea;
+    connect(dropArea, &DropArea::imageDropped, this, &MainWindow::processImage);
 
-    double similarity = compareImages(targetImg, compareImg);
-    if (similarity > 0.50) {
-      std::cout << "\033[1;32mSimilar photo " << ++count << ":\033[0m\n";
-      std::cout << "📸 " << fs::path(photo).filename() << "\n";
-      std::cout << "✨ Similarity: " << std::fixed << std::setprecision(2)
-                << similarity * 100 << "%\n\n";
-      foundSimilar = true;
-    }
+    resultsArea = new QWidget;
+    resultsLayout = new QGridLayout(resultsArea);
+
+    QScrollArea *scrollArea = new QScrollArea;
+    scrollArea->setWidget(resultsArea);
+    scrollArea->setWidgetResizable(true);
+
+    layout->addWidget(dropArea, 0, 0);
+    layout->addWidget(scrollArea, 1, 0);
+
+    setCentralWidget(centralWidget);
+    resize(800, 600);
+    setWindowTitle("PicTrace-x1");
+
+    extractPhotos();
   }
 
-  if (!foundSimilar) {
-    std::cout << "\033[1;33mNo similar photos found.\033[0m\n";
-  }
-}
+private:
+  void extractPhotos() {
+    (void)system("mkdir -p ./extracted_photos");               // Change here
+    (void)system("unzip -o photos.zip -d ./extracted_photos"); // Change here
 
-void listAvailablePhotos(const std::vector<std::string> &imageFiles) {
-  std::cout << "\n\033[1;36mAvailable photos:\033[0m\n";
-  std::cout << "════════════════\n";
-  int count = 0;
-  for (const auto &file : imageFiles) {
-    std::cout << "📸 " << fs::path(file).filename() << "\n";
-    if (++count % 5 == 0)
-      std::cout << "\n";
-  }
-  std::cout << "\n";
-}
-
-int main() {
-  std::string zipPath = "photos.zip";
-  extractZipArchive(zipPath);
-  std::string folderPath = "./extracted_photos";
-
-  std::vector<std::string> imageFiles;
-  for (const auto &entry : fs::directory_iterator(folderPath)) {
-    if (entry.path().extension() == ".jpg" ||
-        entry.path().extension() == ".png" ||
-        entry.path().extension() == ".jpeg") {
-      imageFiles.push_back(entry.path().string());
-    }
-  }
-
-  int choice = 0;
-  while (true) {
-    clearScreen();
-    printHeader();
-    printMenu();
-
-    std::cin >> choice;
-    std::cin.ignore();
-
-    if (choice == 1) {
-      std::cout << "\n\033[1;36mEnter photo name (with extension, e.g. "
-                   "photo.jpg):\033[0m ";
-      std::string photoName;
-      std::getline(std::cin, photoName);
-      std::string fullPath = folderPath + "/" + photoName;
-
-      if (fs::exists(fullPath)) {
-        findSimilarPhotos(fullPath, imageFiles);
-      } else {
-        std::cout << "\033[1;31mError: Photo not found\033[0m\n";
+    for (const auto &entry : fs::directory_iterator("./extracted_photos")) {
+      if (entry.path().extension() == ".jpg" ||
+          entry.path().extension() == ".jpeg" ||
+          entry.path().extension() == ".png") {
+        imageFiles.push_back(entry.path().string());
       }
-    } else if (choice == 2) {
-      listAvailablePhotos(imageFiles);
-    } else if (choice == 3) {
-      std::cout << "\n\033[1;32mThank you for using Photo Similarity "
-                   "Finder!\033[0m\n";
-      break;
-    } else {
-      std::cout << "\033[1;31mInvalid option. Please try again.\033[0m\n";
-    }
-
-    if (choice != 3) {
-      std::cout << "\n\033[1;33mPress Enter to continue...\033[0m";
-      std::cin.get();
     }
   }
 
-  return 0;
+  double compareImages(const cv::Mat &img1, const cv::Mat &img2) {
+    cv::Mat hist1, hist2;
+    int channels[] = {0, 1, 2};
+    int histSize[] = {8, 8, 8};
+    float range[] = {0, 256};
+    const float *ranges[] = {range, range, range};
+
+    cv::calcHist(&img1, 1, channels, cv::Mat(), hist1, 3, histSize, ranges);
+    cv::calcHist(&img2, 1, channels, cv::Mat(), hist2, 3, histSize, ranges);
+
+    cv::normalize(hist1, hist1);
+    cv::normalize(hist2, hist2);
+
+    return cv::compareHist(hist1, hist2, cv::HISTCMP_CORREL);
+  }
+
+  void processImage(const QString &path) {
+    clearResults();
+
+    cv::Mat targetImg = cv::imread(path.toStdString());
+    if (targetImg.empty()) {
+      dropArea->setText("Ошибка загрузки изображения");
+      return;
+    }
+
+    QPixmap preview = QPixmap(path).scaled(300, 200, Qt::KeepAspectRatio);
+    dropArea->setPixmap(preview);
+
+    int row = 0;
+    for (const auto &photo : imageFiles) {
+      cv::Mat compareImg = cv::imread(photo);
+      if (compareImg.empty())
+        continue;
+
+      double similarity = compareImages(targetImg, compareImg);
+      if (similarity > 0.50) {
+        QLabel *imageLabel = new QLabel;
+        QPixmap pixmap(QString::fromStdString(photo));
+        imageLabel->setPixmap(pixmap.scaled(200, 150, Qt::KeepAspectRatio));
+
+        QLabel *similarityLabel = new QLabel(
+            QString("Схожесть: %1%").arg(similarity * 100, 0, 'f', 2));
+
+        resultsLayout->addWidget(imageLabel, row, 0);
+        resultsLayout->addWidget(similarityLabel, row, 1);
+        row++;
+      }
+    }
+  }
+
+  void clearResults() {
+    QLayoutItem *child;
+    while ((child = resultsLayout->takeAt(0)) != nullptr) {
+      delete child->widget();
+      delete child;
+    }
+  }
+
+private:
+  DropArea *dropArea;
+  QWidget *resultsArea;
+  QGridLayout *resultsLayout;
+  std::vector<std::string> imageFiles;
+};
+
+int main(int argc, char *argv[]) {
+  QApplication app(argc, argv);
+  MainWindow window;
+  window.show();
+  return app.exec();
 }
+
+#include "main.moc"
