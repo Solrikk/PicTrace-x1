@@ -8,6 +8,10 @@
 namespace fs = std::filesystem;
 
 void extractZipArchive(const std::string& zipPath) {
+    if (system("mkdir -p ./extracted_photos") != 0) {
+        std::cerr << "Error creating directory" << std::endl;
+        return;
+    }
     std::string cmd = "unzip -o " + zipPath + " -d ./extracted_photos";
     if (system(cmd.c_str()) != 0) {
         std::cerr << "Error extracting zip file" << std::endl;
@@ -15,7 +19,6 @@ void extractZipArchive(const std::string& zipPath) {
     }
 }
 
-// Calculate image similarity using histogram comparison
 double compareImages(const cv::Mat& img1, const cv::Mat& img2) {
     cv::Mat hist1, hist2;
     int channels[] = {0, 1, 2};
@@ -32,6 +35,36 @@ double compareImages(const cv::Mat& img1, const cv::Mat& img2) {
     return cv::compareHist(hist1, hist2, cv::HISTCMP_CORREL);
 }
 
+void findSimilarPhotos(const std::string& targetPhotoPath, const std::vector<std::string>& allPhotos) {
+    cv::Mat targetImg = cv::imread(targetPhotoPath);
+    if(targetImg.empty()) {
+        std::cout << "Error: Cannot open target image\n";
+        return;
+    }
+
+    std::cout << "\nSearching for similar photos...\n\n";
+    bool foundSimilar = false;
+
+    for(const auto& photo : allPhotos) {
+        if(photo == targetPhotoPath) continue;
+
+        cv::Mat compareImg = cv::imread(photo);
+        if(compareImg.empty()) continue;
+
+        double similarity = compareImages(targetImg, compareImg);
+        if(similarity > 0.85) {
+            std::cout << "Similar photo found:\n";
+            std::cout << photo << "\n";
+            std::cout << "Similarity: " << similarity * 100 << "%\n\n";
+            foundSimilar = true;
+        }
+    }
+
+    if(!foundSimilar) {
+        std::cout << "No similar photos found.\n";
+    }
+}
+
 int main() {
     std::string zipPath = "photos.zip";
     extractZipArchive(zipPath);
@@ -39,7 +72,7 @@ int main() {
     
     std::vector<std::string> imageFiles;
     
-    // Collect image files from directory
+    // Collect image files
     for(const auto& entry : fs::directory_iterator(folderPath)) {
         if(entry.path().extension() == ".jpg" || 
            entry.path().extension() == ".png" ||
@@ -47,23 +80,41 @@ int main() {
             imageFiles.push_back(entry.path().string());
         }
     }
-    
-    // Compare all images
-    for(size_t i = 0; i < imageFiles.size(); i++) {
-        cv::Mat img1 = cv::imread(imageFiles[i]);
-        if(img1.empty()) continue;
-        
-        for(size_t j = i + 1; j < imageFiles.size(); j++) {
-            cv::Mat img2 = cv::imread(imageFiles[j]);
-            if(img2.empty()) continue;
-            
-            double similarity = compareImages(img1, img2);
-            if(similarity > 0.85) { // Threshold for similarity
-                std::cout << "Similar images found:\n";
-                std::cout << imageFiles[i] << "\n";
-                std::cout << imageFiles[j] << "\n";
-                std::cout << "Similarity: " << similarity * 100 << "%\n\n";
+
+    while(true) {
+        std::cout << "\n=== Photo Similarity Finder ===\n";
+        std::cout << "1. Enter photo name to compare\n";
+        std::cout << "2. List all photos\n";
+        std::cout << "3. Exit\n";
+        std::cout << "Choose option (1-3): ";
+
+        int choice;
+        std::cin >> choice;
+        std::cin.ignore();
+
+        if(choice == 1) {
+            std::cout << "Enter photo name (with extension, e.g. photo.jpg): ";
+            std::string photoName;
+            std::getline(std::cin, photoName);
+            std::string fullPath = folderPath + "/" + photoName;
+
+            if(fs::exists(fullPath)) {
+                findSimilarPhotos(fullPath, imageFiles);
+            } else {
+                std::cout << "Error: Photo not found\n";
             }
+        }
+        else if(choice == 2) {
+            std::cout << "\nAvailable photos:\n";
+            for(const auto& file : imageFiles) {
+                std::cout << fs::path(file).filename() << "\n";
+            }
+        }
+        else if(choice == 3) {
+            break;
+        }
+        else {
+            std::cout << "Invalid option. Please try again.\n";
         }
     }
     
