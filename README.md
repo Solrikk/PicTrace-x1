@@ -21,3 +21,5 @@
 | 🐧**Linux**            | ```bash sudo git clone https://github.com/Solrikk/PicTrace-x1.git cd PicTrace-x1 sudo pip install poetry sudo poetry install sudo poetry run python3 main.py ``` |
 | 🍎**macOS**            | ```bash sudo git clone https://github.com/Solrikk/PicTrace-x1.git cd PicTrace-x1 sudo pip install poetry sudo poetry install sudo poetry run python3 main.py ``` |
 | 🪟**Windows**          | Open Command Prompt as Administrator and run: ```bash git clone https://github.com/Solrikk/PicTrace-x1.git cd PicTrace-x1 pip install poetry poetry install poetry run python main.py ``` |
+
+![PicTrace Demo](https://github.com/Solrikk/PicTrace-x1/blob/main/assets/gif/shell-PicTrrace.gif)
