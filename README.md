@@ -12,3 +12,5 @@
 </div>
 
 -----------------
+
+**PicTrace-x1** is a powerful C++ console application that allows users to effortlessly find and compare similar photos within a collection. Leveraging the capabilities of OpenCV, this tool analyzes image histograms to determine the degree of similarity between photos, making it an essential utility for photographers, designers, and anyone managing large image libraries.
